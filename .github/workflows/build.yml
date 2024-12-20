@@ -57,7 +57,9 @@ jobs:
         with:
           path: /tmp/artifacts
       - name: Generate SHA256SUMS
-        run: sha256sum /tmp/artifacts/linux-electron/* | awk '{ print }' > "/tmp/artifacts/linux-electron/SHA256SUMS"
+        run: |
+          cd /tmp/artifacts/linux-electron/
+          sha256sum * | awk '{ print }' > "SHA256SUMS"
       - name: Upload to release
         uses: ncipollo/release-action@v1
         with:
