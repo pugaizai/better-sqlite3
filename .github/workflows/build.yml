@@ -16,38 +16,53 @@ env:
   ELECTRON_BUILD_CMD: npx --no-install prebuild -r electron -t 33.0.0 --include-regex 'better_sqlite3.node$'
 
 jobs:
-  build-linux:
-    name: Prebuild on ubuntu-latest
+  build:
     runs-on: ubuntu-latest
     steps:
+      # x64 build
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - if: ${{ startsWith(matrix.os, 'ubuntu') }}
-        run: |
+      - run: |
           sudo apt update
           sudo apt install gcc-10 g++-10 -y
           sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-10 100 --slave /usr/bin/g++ g++ /usr/bin/g++-10 --slave /usr/bin/gcov gcov /usr/bin/gcov-10
-      - run: npm install --ignore-scripts
-      - run: ${{ env.ELECTRON_BUILD_CMD }} -u ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/upload-artifact@v4
-        with:
-          name: linux-amd64
-          path: prebuilds/better-sqlite3-*-x64.tar.gz
-
-  build-linux-arm:
-    name: Prebuild on Linux arm64
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+          npm install --ignore-scripts
+          ${{ env.ELECTRON_BUILD_CMD }}
+      # arm64 build
       - uses: docker/setup-qemu-action@v3
       - run: |
           docker run --rm -v $(pwd):/tmp/project --entrypoint /bin/sh --platform linux/arm64 node:22-bookworm -c "\
           cd /tmp/project && \
           npm install --ignore-scripts && \
-          ${{ env.ELECTRON_BUILD_CMD }} --arch arm64 -u ${{ secrets.GITHUB_TOKEN }}"
+          ${{ env.ELECTRON_BUILD_CMD }} --arch arm64"
       - uses: actions/upload-artifact@v4
         with:
-          name: linux-amd64
-          path: prebuilds/better-sqlite3-*-arm64.tar.gz
+          name: linux-electron
+          path: prebuilds/better-sqlite3-*.tar.gz
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/')
+    name: Publish
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Make tmp dir
+        run: mkdir /tmp/artifacts
+      - name: Download all Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/artifacts
+      - name: List all Artifacts
+        run: ls -R /tmp/artifacts
+      - name: Upload to release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ github.ref_name }}
+          allowUpdates: true
+          artifacts: /tmp/artifacts/linux-electron/better-sqlite3-*.tar.gz
+          artifactErrorsFailBuild: true
+          replacesArtifacts: true
